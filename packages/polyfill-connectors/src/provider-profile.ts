@@ -278,3 +278,20 @@ export function groupmePacingProfile(): ProviderPacingProfile {
 export function jellyfinPacingProfile(): ProviderPacingProfile {
 	return { pacingMinIntervalMs: 100 };
 }
+
+/**
+ * WHOOP — 1000ms (60 req/min). Documented limits are TWO ceilings that bind at
+ * different timescales: 100 requests per minute (=600ms sustained) and 10,000
+ * requests per day. 1000ms is 60% of the per-minute ceiling, and the per-day
+ * ceiling is the one worth checking against a real workload rather than the
+ * per-minute one: WHOOP caps `limit` at 25 records per page, so a five-year
+ * backfill is roughly 220 requests per collection and roughly 660 across
+ * recovery, cycles and sleep — under 7% of the daily budget. An incremental
+ * run is a handful of requests. The margin therefore costs a first backfill
+ * about eleven minutes and costs steady-state runs nothing, which is the right
+ * trade for a source whose data arrives once a day.
+ * Doc: https://developer.whoop.com/docs/developing/rate-limiting/
+ */
+export function whoopPacingProfile(): ProviderPacingProfile {
+	return { pacingMinIntervalMs: 1000 };
+}

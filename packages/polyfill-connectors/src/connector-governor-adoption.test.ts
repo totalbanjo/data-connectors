@@ -38,6 +38,11 @@ const ADOPTED: Array<{ name: string; retryablePattern: RegExp }> = [
 	},
 	{ name: "notion", retryablePattern: /ECONN|fetch failed|rate_limited/i },
 	{ name: "oura", retryablePattern: /rate_limited|ECONN|fetch failed/i },
+	{
+		name: "whoop",
+		retryablePattern:
+			/rate_limited|ECONN|ETIMEDOUT|timeout|fetch failed|whoop_http_5\d\d/i,
+	},
 	{ name: "spotify", retryablePattern: /rate_limited|ECONN|fetch failed/i },
 	{
 		name: "google_calendar",

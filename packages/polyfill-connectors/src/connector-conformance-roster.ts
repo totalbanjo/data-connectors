@@ -51,7 +51,6 @@ export const PRODUCTION_READY_CONNECTORS: Record<string, { testFile: string }> =
 		usaa: { testFile: "connectors/usaa/integration.test.ts" },
 		venmo: { testFile: "connectors/venmo/integration.test.ts" },
 		whatsapp: { testFile: "connectors/whatsapp/integration.test.ts" },
-		whoop: { testFile: "connectors/whoop/integration.test.ts" },
 		ynab: { testFile: "connectors/ynab/integration.test.ts" },
 	};
 /**
@@ -100,4 +99,7 @@ export const REAL_UNLISTED_CONNECTORS: Record<string, { testFile: string }> = {
 	pocket: { testFile: "connectors/pocket/schemas.test.ts" },
 	spotify: { testFile: "connectors/spotify/schemas.test.ts" },
 	twitter_archive: { testFile: "connectors/twitter_archive/parsers.test.ts" },
+	// Real collector against WHOOP's public developer API. Tier development:
+	// verified against recorded fixtures, not against a live account.
+	whoop: { testFile: "connectors/whoop/index.test.ts" },
 };

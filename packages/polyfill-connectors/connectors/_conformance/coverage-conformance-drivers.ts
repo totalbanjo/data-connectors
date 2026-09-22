@@ -1333,14 +1333,9 @@ export const KNOWN_UNEXERCISED_COVERAGE: ReadonlySet<string> = new Set([
 	"venmo.profile",
 	"venmo.friends",
 	"venmo.transactions",
-	// WHOOP (Preview): the owner-visible browser connector has a real
-	// integration suite, but no credential-free coverage driver yet.
-	"whoop.profile",
-	"whoop.cycles",
-	"whoop.recoveries",
-	"whoop.sleeps",
-	"whoop.workouts",
-	"whoop.body",
+	// WHOOP: the public-API connector has a real end-to-end suite against
+	// canned WHOOP pages, but no credential-free coverage driver yet.
+	"whoop.sleep",
 	// WhatsApp (REAL_UNLISTED_CONNECTORS is not it — production-ready — but no
 	// driver yet): export-file based, no credential-free fixture built.
 	"whatsapp.chats",

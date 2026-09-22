@@ -3,324 +3,678 @@
 	"connector_id": "https://registry.pdpp.dev/connectors/whoop",
 	"connector_key": "whoop",
 	"manifest_uri": "https://registry.pdpp.dev/connectors/whoop",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"display_name": "WHOOP",
 	"runtime_requirements": {
 		"bindings": {
-			"network": { "required": true },
-			"browser": { "required": true }
+			"network": {
+				"required": true
+			}
 		}
+	},
+	"setup": {
+		"modality": "provider_authorization",
+		"deployment_config": ["WHOOP_OAUTH_CLIENT_ID", "WHOOP_OAUTH_CLIENT_SECRET"]
 	},
 	"capabilities": {
 		"human_interaction": ["manual_action"],
+		"auth": {
+			"kind": "oauth",
+			"exchanger_kind": "oauth2_generic",
+			"provider_identity_group": "whoop-developer-app",
+			"provider_identity_label": "WHOOP developer application",
+			"authorization_url": "https://api.prod.whoop.com/oauth/oauth2/auth",
+			"token_url": "https://api.prod.whoop.com/oauth/oauth2/token",
+			"userinfo_url": "https://api.prod.whoop.com/developer/v2/user/profile/basic",
+			"authorization_params": {
+				"response_type": "code"
+			},
+			"deployment_config": [
+				{
+					"logical_key": "client_id",
+					"label": "WHOOP OAuth client ID",
+					"secret": false,
+					"env_alias": "WHOOP_OAUTH_CLIENT_ID"
+				},
+				{
+					"logical_key": "client_secret",
+					"label": "WHOOP OAuth client secret",
+					"secret": true,
+					"env_alias": "WHOOP_OAUTH_CLIENT_SECRET"
+				}
+			],
+			"connection_config": [
+				{
+					"env_var": "WHOOP_REFRESH_TOKEN",
+					"bundle_field": "refresh_token"
+				},
+				{
+					"env_var": "WHOOP_ACCESS_TOKEN",
+					"bundle_field": "access_token",
+					"required": false
+				},
+				{
+					"env_var": "WHOOP_ACCESS_TOKEN_EXPIRES_AT",
+					"bundle_field": "expires_at",
+					"required": false
+				}
+			],
+			"env_bundle_kind": "multi_field",
+			"scopes": [
+				"offline",
+				"read:sleep",
+				"read:recovery",
+				"read:cycles",
+				"read:profile"
+			]
+		},
 		"refresh_policy": {
-			"recommended_mode": "automatic",
+			"recommended_mode": "manual",
 			"recommended_interval_seconds": 21600,
 			"minimum_interval_seconds": 7200,
 			"maximum_staleness_seconds": 86400,
 			"interaction_posture": "manual_action_likely",
 			"rate_limit_sensitivity": "medium",
-			"bot_detection_sensitivity": "medium",
-			"background_safe": true,
+			"bot_detection_sensitivity": "low",
+			"background_safe": false,
 			"assisted_after_owner_auth": true,
-			"rationale": "The owner signs in through an isolated WHOOP browser profile. A live owner run proved the full backfill and a second checkpointed run reused the saved session without prompting, so scheduled refresh reuses that session. assisted_after_owner_auth:true means a background run may ask the owner for bounded help if the session lapses."
+			"rationale": "Collection is a documented REST read against a stored OAuth grant, so a run needs no browser and no owner present, and the interval figures suit a source that produces a handful of records a day and rescores the most recent ones within hours. Mode is manual and background_safe is false because WHOOP documents its refresh tokens as rotating and the runtime has no way to persist a rotated one: a refresh can leave the stored credential unusable and require the owner to reconnect, which is not a basis for scheduling unattended collection. The connector reuses a still-valid access token so that a rotation is never spent unnecessarily."
 		},
 		"public_listing": {
-			"tier": "preview",
-			"rationale": "Live owner testing proved all six streams and checkpointed session reuse; first connection still requires the owner to sign in through the isolated WHOOP browser profile."
+			"tier": "development",
+			"rationale": "Real collector against WHOOP's documented public API v2, proven end to end against recorded fixtures; not yet proven against a live WHOOP account."
 		}
+	},
+	"reason_display_messages": {
+		"authorization_expired": "WHOOP needs you to reconnect your account before this can continue.",
+		"awaiting_score": "Some of these are still being scored by WHOOP. They'll be collected automatically once it finishes, usually within a few hours.",
+		"collection_interrupted": "WHOOP stopped responding partway through, so some records are missing. The next run will collect them.",
+		"covered_in_full": "Everything WHOOP had for this period was collected.",
+		"nothing_in_range": "WHOOP had nothing for this period. That's not a problem, there was simply nothing to read.",
+		"older_pages_deferred_page_budget": "We collected as far back as this run allows. The next run continues from where this one stopped.",
+		"page_budget_reached": "We collected as far back as this run allows. The next run continues from where this one stopped.",
+		"unscorable_records_skipped": "WHOOP couldn't score some of these, usually because the strap wasn't worn. They won't arrive later, so there's nothing to retry.",
+		"window_unavailable": "This period is before your WHOOP account had any data."
 	},
 	"streams": [
 		{
-			"name": "profile",
+			"name": "sleep",
 			"required": true,
-			"description": "WHOOP account, owner profile, and membership identity fields.",
+			"description": "Sleeps and naps from WHOOP's public developer API, with stage durations and sleep-need figures. Carries no respiratory rate: that is a separate stream, so it can be requested without this one.",
 			"display": {
-				"label": "Your WHOOP profile",
-				"detail": "Account identity, location, profile preferences, and membership status."
+				"label": "Your WHOOP sleeps",
+				"detail": "For each sleep or nap: when it started and ended, how long was spent in each stage, how disturbed it was, and WHOOP's sleep performance, consistency and efficiency percentages. Nights WHOOP has not scored yet appear with the measurements blank and a score state saying so."
 			},
 			"semantics": "mutable_state",
 			"schema": {
 				"type": "object",
 				"properties": {
-					"id": { "type": "string" },
-					"user_id": { "type": "integer" },
-					"username": { "type": "string", "x_pdpp_role": "primary-title" },
-					"email": { "type": "string" },
-					"account_type": { "type": "string" },
-					"first_name": { "type": "string" },
-					"last_name": { "type": "string" },
-					"country": { "type": ["string", "null"] },
-					"city": { "type": ["string", "null"] },
-					"gender": { "type": ["string", "null"] },
-					"unit_system": { "type": ["string", "null"] },
-					"fitness_level": { "type": ["string", "null"] },
-					"birthday": { "type": ["string", "null"] },
-					"timezone_offset": { "type": ["string", "null"] },
-					"membership_status": { "type": "string" },
-					"membership_in_effect": { "type": "boolean" },
-					"observed_at": {
-						"type": ["string", "null"],
+					"id": {
+						"type": "string",
+						"description": "WHOOP's own sleep UUID."
+					},
+					"cycle_id": {
+						"type": "integer"
+					},
+					"start": {
+						"type": "string",
 						"format": "date-time",
 						"x_pdpp_role": "event-time"
+					},
+					"end": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"timezone_offset": {
+						"type": "string",
+						"description": "UTC offset of the owner's clock at the time of the record, as +HH:MM / -HH:MM."
+					},
+					"nap": {
+						"type": "boolean"
+					},
+					"score_state": {
+						"type": "string",
+						"enum": ["SCORED", "PENDING_SCORE", "UNSCORABLE"]
+					},
+					"total_in_bed_time_milli": {
+						"type": ["integer", "null"]
+					},
+					"total_awake_time_milli": {
+						"type": ["integer", "null"]
+					},
+					"total_no_data_time_milli": {
+						"type": ["integer", "null"]
+					},
+					"total_light_sleep_time_milli": {
+						"type": ["integer", "null"]
+					},
+					"total_slow_wave_sleep_time_milli": {
+						"type": ["integer", "null"]
+					},
+					"total_rem_sleep_time_milli": {
+						"type": ["integer", "null"]
+					},
+					"sleep_cycle_count": {
+						"type": ["integer", "null"]
+					},
+					"disturbance_count": {
+						"type": ["integer", "null"]
+					},
+					"sleep_needed_baseline_milli": {
+						"type": ["integer", "null"]
+					},
+					"sleep_needed_from_sleep_debt_milli": {
+						"type": ["integer", "null"]
+					},
+					"sleep_needed_from_recent_strain_milli": {
+						"type": ["integer", "null"]
+					},
+					"sleep_needed_from_recent_nap_milli": {
+						"type": ["integer", "null"]
+					},
+					"sleep_performance_percentage": {
+						"type": ["number", "null"]
+					},
+					"sleep_consistency_percentage": {
+						"type": ["number", "null"]
+					},
+					"sleep_efficiency_percentage": {
+						"type": ["number", "null"]
+					},
+					"source": {
+						"type": "string",
+						"enum": ["whoop_api_v2"]
+					},
+					"freshness": {
+						"type": "string",
+						"enum": ["live", "snapshot"]
+					},
+					"collected_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
 					}
 				},
 				"required": [
 					"id",
-					"user_id",
-					"username",
-					"email",
-					"first_name",
-					"last_name"
-				]
+					"cycle_id",
+					"start",
+					"end",
+					"timezone_offset",
+					"nap",
+					"score_state",
+					"total_in_bed_time_milli",
+					"total_awake_time_milli",
+					"total_no_data_time_milli",
+					"total_light_sleep_time_milli",
+					"total_slow_wave_sleep_time_milli",
+					"total_rem_sleep_time_milli",
+					"sleep_cycle_count",
+					"disturbance_count",
+					"sleep_needed_baseline_milli",
+					"sleep_needed_from_sleep_debt_milli",
+					"sleep_needed_from_recent_strain_milli",
+					"sleep_needed_from_recent_nap_milli",
+					"sleep_performance_percentage",
+					"sleep_consistency_percentage",
+					"sleep_efficiency_percentage",
+					"source",
+					"freshness",
+					"collected_at",
+					"updated_at"
+				],
+				"additionalProperties": false
 			},
 			"primary_key": ["id"],
-			"cursor_field": "observed_at",
-			"selection": { "fields": true, "resources": true },
+			"cursor_field": "start",
+			"consent_time_field": "start",
+			"selection": {
+				"fields": true,
+				"resources": true
+			},
 			"incremental": true,
 			"query": {
-				"search": {
-					"lexical_fields": [
-						"username",
-						"email",
-						"first_name",
-						"last_name",
-						"city",
-						"country"
-					]
+				"range_filters": {
+					"start": ["gte", "gt", "lte", "lt"],
+					"end": ["gte", "gt", "lte", "lt"],
+					"updated_at": ["gte", "gt", "lte", "lt"],
+					"collected_at": ["gte", "gt", "lte", "lt"]
+				},
+				"aggregations": {
+					"count": true,
+					"group_by_time": ["start"]
 				}
 			},
-			"coverage_strategy": "full_inventory",
-			"freshness_strategy": "manual_as_of"
+			"coverage_strategy": "checkpoint_window",
+			"freshness_strategy": "scheduled_window"
 		},
 		{
-			"name": "body",
-			"required": true,
-			"description": "WHOOP body measurements and heart-rate bounds.",
+			"name": "respiratory_rate",
+			"required": false,
+			"description": "Breathing rate measured over each sleep. Split out of the sleep stream deliberately, so a reading application can obtain breathing measurements without also obtaining sleep staging, disturbance counts and sleep-debt figures.",
 			"display": {
-				"label": "Your WHOOP body measurements",
-				"detail": "Height, weight, maximum, minimum, and resting heart rate."
+				"label": "Your breathing rate during sleep",
+				"detail": "One breaths-per-minute figure for each sleep WHOOP measured one over, with the sleep window it was measured across. Sleeps with no measurement are absent rather than present-and-blank, so an empty result means WHOOP measured none."
 			},
 			"semantics": "mutable_state",
 			"schema": {
 				"type": "object",
 				"properties": {
-					"id": { "type": "string" },
-					"user_id": { "type": "integer" },
-					"height_m": { "type": ["number", "null"] },
-					"weight_kg": { "type": ["number", "null"] },
-					"max_heart_rate": { "type": ["number", "null"] },
-					"min_heart_rate": { "type": ["number", "null"] },
-					"resting_heart_rate": { "type": ["number", "null"] },
-					"observed_at": {
-						"type": ["string", "null"],
+					"sleep_id": {
+						"type": "string",
+						"description": "WHOOP sleep UUID this measurement was taken over."
+					},
+					"cycle_id": {
+						"type": "integer"
+					},
+					"start": {
+						"type": "string",
 						"format": "date-time",
 						"x_pdpp_role": "event-time"
+					},
+					"end": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"timezone_offset": {
+						"type": "string",
+						"description": "UTC offset of the owner's clock at the time of the record, as +HH:MM / -HH:MM."
+					},
+					"nap": {
+						"type": "boolean"
+					},
+					"respiratory_rate": {
+						"type": "number",
+						"description": "Breaths per minute, as WHOOP reports it."
+					},
+					"score_state": {
+						"type": "string",
+						"enum": ["SCORED", "PENDING_SCORE", "UNSCORABLE"]
+					},
+					"source": {
+						"type": "string",
+						"enum": ["whoop_api_v2"]
+					},
+					"freshness": {
+						"type": "string",
+						"enum": ["live", "snapshot"]
+					},
+					"collected_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
 					}
 				},
-				"required": ["id", "user_id"]
+				"required": [
+					"sleep_id",
+					"cycle_id",
+					"start",
+					"end",
+					"timezone_offset",
+					"nap",
+					"respiratory_rate",
+					"score_state",
+					"source",
+					"freshness",
+					"collected_at",
+					"updated_at"
+				],
+				"additionalProperties": false
 			},
-			"primary_key": ["id"],
-			"cursor_field": "observed_at",
-			"selection": { "fields": true, "resources": true },
+			"primary_key": ["sleep_id"],
+			"cursor_field": "start",
+			"consent_time_field": "start",
+			"selection": {
+				"fields": true,
+				"resources": true
+			},
 			"incremental": true,
 			"query": {
 				"range_filters": {
-					"height_m": ["gte", "gt", "lte", "lt"],
-					"weight_kg": ["gte", "gt", "lte", "lt"]
+					"start": ["gte", "gt", "lte", "lt"],
+					"end": ["gte", "gt", "lte", "lt"],
+					"updated_at": ["gte", "gt", "lte", "lt"],
+					"collected_at": ["gte", "gt", "lte", "lt"]
 				},
-				"aggregations": { "count": true }
-			},
-			"coverage_strategy": "full_inventory",
-			"freshness_strategy": "manual_as_of"
-		},
-		{
-			"name": "cycles",
-			"required": true,
-			"description": "WHOOP physiological cycles and day strain summaries.",
-			"display": {
-				"label": "Your WHOOP cycles",
-				"detail": "Cycle interval, strain, energy, and day heart-rate summary."
-			},
-			"semantics": "mutable_state",
-			"schema": {
-				"type": "object",
-				"properties": {
-					"id": { "type": "string" },
-					"cycle_id": { "type": "integer" },
-					"days": { "type": ["string", "null"] },
-					"start_date": {
-						"type": ["string", "null"],
-						"format": "date",
-						"x_pdpp_role": "event-time"
-					},
-					"end_date": { "type": ["string", "null"], "format": "date" },
-					"scaled_strain": { "type": ["number", "null"] },
-					"day_kilojoules": { "type": ["number", "null"] },
-					"day_avg_heart_rate": { "type": ["number", "null"] },
-					"day_max_heart_rate": { "type": ["number", "null"] }
-				},
-				"required": ["id", "cycle_id"]
-			},
-			"primary_key": ["id"],
-			"cursor_field": "start_date",
-			"consent_time_field": "start_date",
-			"selection": { "fields": true, "resources": true },
-			"incremental": true,
-			"query": {
-				"range_filters": {
-					"start_date": ["gte", "gt", "lte", "lt"],
-					"end_date": ["gte", "gt", "lte", "lt"],
-					"scaled_strain": ["gte", "gt", "lte", "lt"]
-				},
-				"aggregations": { "count": true, "group_by_time": ["start_date"] }
+				"aggregations": {
+					"count": true,
+					"group_by_time": ["start"]
+				}
 			},
 			"coverage_strategy": "checkpoint_window",
-			"freshness_strategy": "manual_as_of"
+			"freshness_strategy": "scheduled_window"
 		},
 		{
-			"name": "recoveries",
-			"required": true,
-			"description": "WHOOP cycle recovery measurements.",
+			"name": "recovery",
+			"required": false,
+			"description": "WHOOP recovery scores, one per physiological cycle, with the heart-rate and variability measurements behind them.",
 			"display": {
-				"label": "Your WHOOP recoveries",
-				"detail": "Recovery score, HRV, resting heart rate, blood oxygen, and skin temperature."
+				"label": "Your WHOOP recovery",
+				"detail": "For each day: WHOOP's recovery percentage, resting heart rate, heart-rate variability, and where the strap supports them, blood-oxygen and skin-temperature readings. Days WHOOP has not scored yet appear with the measurements blank."
 			},
 			"semantics": "mutable_state",
 			"schema": {
 				"type": "object",
 				"properties": {
-					"id": { "type": "string" },
-					"cycle_id": { "type": "integer" },
+					"cycle_id": {
+						"type": "integer"
+					},
+					"sleep_id": {
+						"type": "string"
+					},
 					"created_at": {
 						"type": "string",
 						"format": "date-time",
 						"x_pdpp_role": "event-time"
 					},
-					"hrv_rmssd": { "type": "number" },
-					"recovery_score": { "type": "number" },
-					"resting_heart_rate": { "type": ["number", "null"] },
-					"spo2": { "type": ["number", "null"] },
-					"skin_temp_celsius": { "type": ["number", "null"] }
+					"score_state": {
+						"type": "string",
+						"enum": ["SCORED", "PENDING_SCORE", "UNSCORABLE"]
+					},
+					"user_calibrating": {
+						"type": ["boolean", "null"]
+					},
+					"recovery_score": {
+						"type": ["number", "null"]
+					},
+					"resting_heart_rate": {
+						"type": ["number", "null"]
+					},
+					"hrv_rmssd_milli": {
+						"type": ["number", "null"]
+					},
+					"spo2_percentage": {
+						"type": ["number", "null"]
+					},
+					"skin_temp_celsius": {
+						"type": ["number", "null"]
+					},
+					"source": {
+						"type": "string",
+						"enum": ["whoop_api_v2"]
+					},
+					"freshness": {
+						"type": "string",
+						"enum": ["live", "snapshot"]
+					},
+					"collected_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
 				},
 				"required": [
-					"id",
 					"cycle_id",
+					"sleep_id",
 					"created_at",
-					"hrv_rmssd",
-					"recovery_score"
-				]
+					"score_state",
+					"user_calibrating",
+					"recovery_score",
+					"resting_heart_rate",
+					"hrv_rmssd_milli",
+					"spo2_percentage",
+					"skin_temp_celsius",
+					"source",
+					"freshness",
+					"collected_at",
+					"updated_at"
+				],
+				"additionalProperties": false
 			},
-			"primary_key": ["id"],
+			"primary_key": ["cycle_id"],
 			"cursor_field": "created_at",
 			"consent_time_field": "created_at",
-			"selection": { "fields": true, "resources": true },
+			"selection": {
+				"fields": true,
+				"resources": true
+			},
 			"incremental": true,
 			"query": {
 				"range_filters": {
 					"created_at": ["gte", "gt", "lte", "lt"],
-					"recovery_score": ["gte", "gt", "lte", "lt"]
-				},
-				"aggregations": { "count": true, "group_by_time": ["created_at"] }
-			},
-			"coverage_strategy": "checkpoint_window",
-			"freshness_strategy": "manual_as_of"
-		},
-		{
-			"name": "sleeps",
-			"required": true,
-			"description": "WHOOP sleep activities and stage durations.",
-			"display": {
-				"label": "Your WHOOP sleeps",
-				"detail": "Sleep interval, score, respiratory rate, and sleep-stage durations in milliseconds."
-			},
-			"semantics": "mutable_state",
-			"schema": {
-				"type": "object",
-				"properties": {
-					"id": { "type": "string" },
-					"cycle_id": { "type": "integer" },
-					"during": { "type": "string" },
-					"start_at": {
-						"type": ["string", "null"],
-						"format": "date-time",
-						"x_pdpp_role": "event-time"
-					},
-					"end_at": { "type": ["string", "null"], "format": "date-time" },
-					"time_in_bed": { "type": "number" },
-					"light_sleep_duration": { "type": "number" },
-					"slow_wave_sleep_duration": { "type": "number" },
-					"rem_sleep_duration": { "type": "number" },
-					"wake_duration": { "type": "number" },
-					"respiratory_rate": { "type": ["number", "null"] },
-					"score": { "type": ["number", "null"] }
-				},
-				"required": ["id", "cycle_id", "during"]
-			},
-			"primary_key": ["id"],
-			"cursor_field": "start_at",
-			"consent_time_field": "start_at",
-			"selection": { "fields": true, "resources": true },
-			"incremental": true,
-			"query": {
-				"range_filters": {
-					"start_at": ["gte", "gt", "lte", "lt"],
-					"end_at": ["gte", "gt", "lte", "lt"],
-					"score": ["gte", "gt", "lte", "lt"]
-				},
-				"aggregations": { "count": true, "group_by_time": ["start_at"] }
-			},
-			"coverage_strategy": "checkpoint_window",
-			"freshness_strategy": "manual_as_of"
-		},
-		{
-			"name": "workouts",
-			"required": true,
-			"description": "WHOOP workout activities.",
-			"display": {
-				"label": "Your WHOOP workouts",
-				"detail": "Workout interval, sport ID, energy, timezone, and heart-rate summary."
-			},
-			"semantics": "mutable_state",
-			"schema": {
-				"type": "object",
-				"properties": {
-					"id": { "type": "string" },
-					"cycle_id": { "type": "integer" },
-					"during": { "type": ["string", "null"] },
-					"start_at": {
-						"type": ["string", "null"],
-						"format": "date-time",
-						"x_pdpp_role": "event-time"
-					},
-					"end_at": { "type": ["string", "null"], "format": "date-time" },
-					"timezone_offset": { "type": ["string", "null"] },
-					"sport_id": { "type": ["number", "null"] },
-					"kilojoules": { "type": ["number", "null"] },
-					"average_heart_rate": { "type": ["number", "null"] },
-					"max_heart_rate": { "type": ["number", "null"] }
-				},
-				"required": ["id", "cycle_id"]
-			},
-			"primary_key": ["id"],
-			"cursor_field": "start_at",
-			"consent_time_field": "start_at",
-			"selection": { "fields": true, "resources": true },
-			"incremental": true,
-			"query": {
-				"range_filters": {
-					"start_at": ["gte", "gt", "lte", "lt"],
-					"end_at": ["gte", "gt", "lte", "lt"],
-					"kilojoules": ["gte", "gt", "lte", "lt"]
+					"updated_at": ["gte", "gt", "lte", "lt"],
+					"collected_at": ["gte", "gt", "lte", "lt"]
 				},
 				"aggregations": {
 					"count": true,
-					"group_by_time": ["start_at"],
-					"group_by": ["sport_id"]
+					"group_by_time": ["created_at"]
 				}
 			},
 			"coverage_strategy": "checkpoint_window",
-			"freshness_strategy": "manual_as_of"
+			"freshness_strategy": "scheduled_window"
+		},
+		{
+			"name": "cycles",
+			"required": false,
+			"description": "WHOOP physiological cycles — the day as WHOOP measures it, beginning when the owner wakes rather than at midnight. This is the strain stream: day strain is the headline figure on a cycle. It is named for the resource rather than the field because the record also carries energy expenditure and heart rate.",
+			"display": {
+				"label": "Your WHOOP daily strain",
+				"detail": "For each WHOOP day: the day strain score, energy expended in kilojoules, and average and maximum heart rate. The day in progress appears with no end time until it closes."
+			},
+			"semantics": "mutable_state",
+			"schema": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"start": {
+						"type": "string",
+						"format": "date-time",
+						"x_pdpp_role": "event-time"
+					},
+					"end": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"timezone_offset": {
+						"type": "string",
+						"description": "UTC offset of the owner's clock at the time of the record, as +HH:MM / -HH:MM."
+					},
+					"score_state": {
+						"type": "string",
+						"enum": ["SCORED", "PENDING_SCORE", "UNSCORABLE"]
+					},
+					"strain": {
+						"type": ["number", "null"]
+					},
+					"kilojoule": {
+						"type": ["number", "null"]
+					},
+					"average_heart_rate": {
+						"type": ["integer", "null"]
+					},
+					"max_heart_rate": {
+						"type": ["integer", "null"]
+					},
+					"source": {
+						"type": "string",
+						"enum": ["whoop_api_v2"]
+					},
+					"freshness": {
+						"type": "string",
+						"enum": ["live", "snapshot"]
+					},
+					"collected_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"start",
+					"end",
+					"timezone_offset",
+					"score_state",
+					"strain",
+					"kilojoule",
+					"average_heart_rate",
+					"max_heart_rate",
+					"source",
+					"freshness",
+					"collected_at",
+					"updated_at"
+				],
+				"additionalProperties": false
+			},
+			"primary_key": ["id"],
+			"cursor_field": "start",
+			"consent_time_field": "start",
+			"selection": {
+				"fields": true,
+				"resources": true
+			},
+			"incremental": true,
+			"query": {
+				"range_filters": {
+					"start": ["gte", "gt", "lte", "lt"],
+					"end": ["gte", "gt", "lte", "lt"],
+					"updated_at": ["gte", "gt", "lte", "lt"],
+					"collected_at": ["gte", "gt", "lte", "lt"]
+				},
+				"aggregations": {
+					"count": true,
+					"group_by_time": ["start"]
+				}
+			},
+			"coverage_strategy": "checkpoint_window",
+			"freshness_strategy": "scheduled_window"
+		},
+		{
+			"name": "coverage_diagnostics",
+			"required": false,
+			"description": "What this run covered for each stream and why it stops where it does. One record per stream per run.",
+			"display": {
+				"label": "What this WHOOP collection covered",
+				"detail": "The window asked for, the window actually read, how many records arrived, how many are still waiting on a WHOOP score, how many WHOOP will never score, and the reason the covered window ends where it does."
+			},
+			"semantics": "mutable_state",
+			"schema": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"stream": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["complete", "partial", "empty"]
+					},
+					"reason": {
+						"type": "string",
+						"enum": [
+							"covered_in_full",
+							"nothing_in_range",
+							"awaiting_score",
+							"unscorable_records_skipped",
+							"page_budget_reached",
+							"rate_limited",
+							"authorization_expired",
+							"collection_interrupted",
+							"window_unavailable"
+						],
+						"x_pdpp_role": "primary-title"
+					},
+					"record_count": {
+						"type": "integer"
+					},
+					"records_pending_score": {
+						"type": "integer"
+					},
+					"records_unscorable": {
+						"type": "integer"
+					},
+					"fields_unavailable": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"window_requested_from": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"window_requested_to": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"window_covered_from": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"window_covered_to": {
+						"type": ["string", "null"],
+						"format": "date-time"
+					},
+					"source": {
+						"type": "string",
+						"enum": ["whoop_api_v2"]
+					},
+					"freshness": {
+						"type": "string",
+						"enum": ["live", "snapshot"]
+					},
+					"collected_at": {
+						"type": "string",
+						"format": "date-time",
+						"x_pdpp_role": "event-time"
+					}
+				},
+				"required": [
+					"id",
+					"stream",
+					"status",
+					"reason",
+					"record_count",
+					"records_pending_score",
+					"records_unscorable",
+					"fields_unavailable",
+					"window_requested_from",
+					"window_requested_to",
+					"window_covered_from",
+					"window_covered_to",
+					"source",
+					"freshness",
+					"collected_at"
+				],
+				"additionalProperties": false
+			},
+			"primary_key": ["id"],
+			"selection": {
+				"fields": true,
+				"resources": true
+			},
+			"incremental": false,
+			"query": {
+				"range_filters": {
+					"window_requested_from": ["gte", "gt", "lte", "lt"],
+					"window_requested_to": ["gte", "gt", "lte", "lt"],
+					"window_covered_from": ["gte", "gt", "lte", "lt"],
+					"window_covered_to": ["gte", "gt", "lte", "lt"],
+					"collected_at": ["gte", "gt", "lte", "lt"]
+				},
+				"aggregations": {
+					"count": true
+				}
+			},
+			"coverage_policy": "inventory_only",
+			"coverage_strategy": "full_inventory",
+			"freshness_strategy": "scheduled_window"
 		}
 	]
 }
