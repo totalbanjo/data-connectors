@@ -12,9 +12,8 @@
     "pdpp": {
       "owner": "PDP-Connect",
       "repo": "pdpp",
-      "sha": "422c277447c51a0b390d3c416a82b6dcaca246f8",
-      "branch": "main",
-      "note": "Head of PDP-Connect/pdpp main after pdpp#364 merged, confirmed an ancestor of main. Supersedes 6f4bf5049. This pin backs drift job (d) reference-contract."
+      "sha": "8f79a48d7fe94a6b2aab15aac78d409b9ea13712",
+      "note": "Supersedes pinned SHA 422c277447c51a0b390d3c416a82b6dcaca246f8 with 8f79a48d7fe94a6b2aab15aac78d409b9ea13712 on main. This pin backs drift jobs (d) reference-contract."
     }
   }
 }
